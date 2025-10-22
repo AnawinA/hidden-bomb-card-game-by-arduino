@@ -35,7 +35,7 @@ enum AppState { STATE_LOADING, STATE_START, STATE_MENU,
 
 
 // Menu items
-const char* menuItems[] = {"Bomb or Not", "Hidden Bomb", "Show Card ID", "Skills"};
+const char* menuItems[] = {"Bomb Roulette", "Hidden Bomb", "Show Card ID", "Skills"};
 const int menuCount = 4;
 int currentSelection = 0;
 
@@ -46,7 +46,7 @@ bool lastGoRead = LOW;
 bool goPressed = false;
 
 // Slower fake loading
-const unsigned long LOADING_DURATION_MS = 1500;
+const unsigned long LOADING_DURATION_MS = 1000;
 
 //Game: Bomb or Not
 enum GameState {SET_BOMB, SCAN_CARD, RESULT};
@@ -209,7 +209,7 @@ void loop() {
       break;
     
     case STATE_BOMB_OR_NOT:
-      bombOrNotGame();
+      BombRouletteGame();
       break;
 
     case STATE_CARD_ID:
@@ -315,15 +315,16 @@ void showMenuScreen() {
     display.print(menuItems[currentSelection + 1]);
   }
 
+  int miniIconX = 100;
   switch (currentSelection) {
     case 0:
-      display.drawBitmap(92, y, icon_bomb, 8, 8, SH110X_WHITE);
+      display.drawBitmap(miniIconX, y, icon_bomb, 8, 8, SH110X_WHITE);
       break;
     case 1:
-      display.drawBitmap(92, y, icon_players, 8, 8, SH110X_WHITE);
+      display.drawBitmap(miniIconX, y, icon_players, 8, 8, SH110X_WHITE);
       break;
     case 2:
-      display.drawBitmap(92, y, icon_question, 8, 8, SH110X_WHITE);
+      display.drawBitmap(miniIconX, y, icon_question, 8, 8, SH110X_WHITE);
       break;
   }
 
@@ -381,7 +382,7 @@ void loadingScreen() {
 
 std::vector<String> shieldCards;
 
-void bombOrNotGame() {
+void BombRouletteGame() {
   // Fake loading
   loadingScreen();
   delay(1000);
