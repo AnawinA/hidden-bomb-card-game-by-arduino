@@ -566,7 +566,7 @@ void BombIsExploding() {
 void hiddenDefuse_setTimeDisplay() {
   display.clearDisplay();
   display.setTextSize(1);
-  drawCenteredText("<  set time (Ready?) >", -10);
+  drawCenteredText("< set time (Ready?) >", -10);
   display.setTextSize(2);
   display.setCursor(50, 30);
   display.print(timeLimit_hiddenDefuse/1000);
