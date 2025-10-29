@@ -4,7 +4,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 #include <MFRC522.h>
-#include <vector>
+#include <EEPROM.h>
+#include <map>
+#include <set>
 
 
 // OLED config
@@ -35,9 +37,13 @@ enum AppState { STATE_LOADING, STATE_START, STATE_MENU,
 
 
 // Menu items
-const char* menuItems[] = {"Bomb Roulette", "Hidden Bomb", "Show Card ID", "Skills"};
-const int menuCount = 4;
+const char* menuItems[] = {
+  "Bomb Roulette", "Hidden Bomb", "Show Card ID",
+  "Skills", "Bomb's Exploding", "Hidden Defuse",
+  "Bomb Dungeon", "Hold a Bomb"};
+const int menuCount = 8;
 int currentSelection = 0;
+const int ADDR_SELECTION = 0;
 
 // Debounce helpers
 unsigned long lastDebounceTime = 0;
@@ -51,6 +57,10 @@ const unsigned long LOADING_DURATION_MS = 1000;
 //Game: Bomb or Not
 enum GameState {SET_BOMB, SCAN_CARD, RESULT};
 AppState state = STATE_LOADING;
+
+unsigned long timeLimit_hiddenDefuse = 10000; 
+const int ADDR_TIME_LIMIT_HIDDEN_DEFUSE = 1;
+
 
 // ------------------------------------------------------------------
 //  Simple Bomb Icon 32x32 (monochrome bitmap)
@@ -119,15 +129,15 @@ void setupPins() {
   pinMode(PIN_G, OUTPUT);
   pinMode(PIN_B, OUTPUT);
 
-  rgbLed(0, 0, 0);
+  Wire.begin();
+  Wire.setClock(50000);
+
+  gyr(1, 1, 1);
 }
 
 void setup() {
   Serial.begin(115200);
   setupPins();
-
-  SPI.begin();
-  rfid.PCD_Init();
 
   SPI.begin();
   rfid.PCD_Init();
@@ -141,6 +151,12 @@ void setup() {
 
   drawLoadingAnimation();
   state = STATE_START;
+
+  currentSelection = EEPROM.read(ADDR_SELECTION);
+  if (currentSelection < 0 || currentSelection >= menuCount) {
+    currentSelection = 0; // fallback safety
+  }
+
   showStartScreen();
 }
 
@@ -161,23 +177,26 @@ void loop() {
       break;
 
     case STATE_MENU:
-        if (digitalRead(PIN_BTN_LEFT) == HIGH) {
-          if (currentSelection > 0) currentSelection--;
-          showMenuScreen();
-          delay(200); // debounce
-        }
-        
         if (digitalRead(PIN_BTN_RIGHT) == HIGH) {
-          if (currentSelection < menuCount - 1) currentSelection++;
-          showMenuScreen();
-          delay(200);
+          if (currentSelection < menuCount - 1) {
+            currentSelection++;
+            showMenuScreen();
+            delay(200);
+          }
         }
-
+        if (digitalRead(PIN_BTN_LEFT) == HIGH) {
+          if (currentSelection > 0) {
+            currentSelection--;
+            showMenuScreen();
+            delay(200);
+          }
+        }
         pollGoButton();
         if (goPressed) {
           goPressed = false;
           tone(PIN_BEEP, 1000, 100); // short beep
           Serial.println(currentSelection);
+          EEPROM.update(ADDR_SELECTION, currentSelection);  // Save to EEPROM
           switch (currentSelection) {
             case 0:
               state = STATE_BOMB_OR_NOT;
@@ -188,21 +207,30 @@ void loop() {
             case 3:
               tutorialMenu();
               break;
+            case 4:
+              BombIsExploding();
+              break;
+            case 5:
+              hiddenDefuse();
+              break;
+            case 6:
+              BombDungeon();
+              break;
+            case 7:
+              holdABomb();
+              break;
           }
         }
 
-        switch (currentSelection) {
+        switch (currentSelection % 3) {
           case 0:
-            rgbLed(50, 0, 0);
+            gyr(1, 0, 0);
             break;
           case 1:
-            rgbLed(0, 20, 0);
+            gyr(0, 1, 0);
             break;
           case 2:
-            rgbLed(0, 0, 50);
-            break;
-          case 3:
-            rgbLed(50, 20, 50);
+            gyr(0, 0, 1);
             break;
         }
 
@@ -343,8 +371,30 @@ void shortBeep() {
   noTone(PIN_BEEP);
 }
 
+void doubleBeep() {
+  tone(PIN_BEEP, 1000, 50);
+  delay(100);
+  tone(PIN_BEEP, 1000, 50);
+}
+
+void resetRFID() {
+  rfid.PCD_Reset();
+  rfid.PCD_Init();
+  Serial.println("RFID reinitialized");
+}
+
 String getCardID() {
-  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return "";
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
+    static unsigned long lastCheck = 0;
+    if (millis() - lastCheck > 500) { // check every 5s
+      lastCheck = millis();
+      if (!rfid.PCD_PerformSelfTest()) { // test RFID health
+        resetRFID();
+      }
+    }
+    return "";
+  }
+
   String content = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
     content.concat(String(rfid.uid.uidByte[i] < 0x10 ? "0" : ""));
@@ -356,14 +406,15 @@ String getCardID() {
   return content;
 }
 
-void drawCenteredText(const char* text, int size = 1) {
+
+void drawCenteredText(String text, int y = 0, int size = 1) {
   display.clearDisplay();
   display.setTextSize(size);
   display.setTextColor(SH110X_WHITE);
   int16_t x1, y1;
   uint16_t w, h;
   display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-  display.setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
+  display.setCursor((SCREEN_WIDTH - w) / 2, ((SCREEN_HEIGHT - h) / 2) + y);
   display.print(text);
   display.display();
 }
@@ -372,7 +423,7 @@ String bombCardID = "";
 String scannedCardID = "";
 
 void loadingScreen() {
-  rgbLed(0, 0, 0);
+  gyr(0, 0, 0);
   display.clearDisplay();
   display.setTextSize(2);
   display.setCursor(20, 28);
@@ -380,7 +431,6 @@ void loadingScreen() {
   display.display();
 }
 
-std::vector<String> shieldCards;
 
 void BombRouletteGame() {
   // Fake loading
@@ -390,7 +440,7 @@ void BombRouletteGame() {
   // Step 1: Set bomb card
   display.setTextSize(1);
   drawCenteredText("Scan Bomb Card");
-  rgbLed(50, 20, 0); 
+  gyr(0, 1, 0); 
   bombCardID = "";
   while (bombCardID == "") {
     bombCardID = getCardID();
@@ -403,35 +453,28 @@ void BombRouletteGame() {
   }
   shortBeep();
 
-  // while (digitalRead(PIN_BTN_GO) == LOW) {
-    
-  //   shieldCards.push_back();
-
-  //   if (digitalRead(PIN_BTN_GO) == HIGH) {
-  //     break;
-  //     shortBeep();
-  //   }
-  // }
-
-
+  int isSkip = 1;
   drawCenteredText("Shuffle your card");
-  rgbLed(50, 0, 50);
+  gyr(0, 0, 0);
   delay(2000);
+  if (digitalRead(PIN_BTN_GO) == HIGH) isSkip = 0;
   drawCenteredText("Shuffle your card.");
-  rgbLed(0, 0, 0);
-  delay(2000);
+  gyr(1, 0, 0);
+  delay(2000*isSkip);
+  if (digitalRead(PIN_BTN_GO) == HIGH) isSkip = 0;
   drawCenteredText("Shuffle your card..");
-  rgbLed(50, 0, 50);
-  delay(2000);
+  gyr(1, 1, 0);
+  delay(2000*isSkip);
+  if (digitalRead(PIN_BTN_GO) == HIGH) isSkip = 0;
   drawCenteredText("Shuffle your card...");
-  rgbLed(0, 0, 0);
-  delay(2000);
+  gyr(1, 1, 1);
+  delay(2000*isSkip);
   shortBeep();
 
 
   // Step 2: Player scan
   while (true) {
-    rgbLed(50, 20, 0);
+    gyr(0, 0, 0);
     drawCenteredText("Scan Your Card");
     scannedCardID = "";
     while (scannedCardID == "") {
@@ -439,20 +482,20 @@ void BombRouletteGame() {
     }
     // Step 3: Check result
     if (scannedCardID == bombCardID) {
-      rgbLed(50, 0, 0);
+      gyr(0, 0, 1);
       int bombX = (SCREEN_WIDTH - 32) / 2;
       display.clearDisplay();
       display.drawBitmap(bombX, 20, bombBitmap, 32, 32, SH110X_WHITE);
       display.display();
       longBeep();
-      rgbLed(0, 0, 0);
-      drawCenteredText("YOU LOSE X", 2);
+      gyr(0, 0, 0);
+      drawCenteredText("YOU LOSE X", 0, 2);
       delay(2000);
       break;
     } else {
-      rgbLed(0, 20, 0);
+      gyr(1, 0, 0);
       shortBeep();
-      drawCenteredText("SAFE /", 2);
+      drawCenteredText("SAFE /", 0, 2);
       delay(1500);
     }
   }
@@ -460,6 +503,381 @@ void BombRouletteGame() {
 
   // Step 4: Return to menu
   // (You can replace this with a proper state change)
+  backToMenu();
+}
+
+
+
+void BombIsExploding() {
+  int correctWire = random(0, 3);
+  const unsigned long TIME_LIMIT = 3000;
+  unsigned long start = millis();
+  bool success = false;
+
+  // Start screen
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(10, 10);
+  display.println(F("💣 CUT THE WIRE!"));
+  display.setCursor(10, 26);
+  display.println(F("[LEFT] [GO] [RIGHT]"));
+  display.display();
+
+  // Countdown loop
+  while (millis() - start < TIME_LIMIT) {
+    unsigned long elapsed = millis() - start;
+    int remaining = (TIME_LIMIT - elapsed + 999) / 1000; // ceiling rounding
+
+    // Draw countdown number
+    display.fillRect(50, 40, 30, 20, SH110X_BLACK); // clear area
+    display.setTextSize(2);
+    display.setCursor(58, 40);
+    display.print(remaining);
+    display.display();
+
+    // Check input
+    if (digitalRead(PIN_BTN_LEFT) == HIGH && correctWire == 0) { success = true; break; } 
+    if (digitalRead(PIN_BTN_GO)   == HIGH && correctWire == 1) { success = true; break; }
+    if (digitalRead(PIN_BTN_RIGHT)== HIGH && correctWire == 2) { success = true; break; }
+
+    delay(50);
+  }
+
+  // Result
+  display.clearDisplay();
+  display.setTextSize(2);
+  if (success) {
+    gyr(0,1,0); shortBeep();
+    display.setCursor(25, 24);
+    display.print(F("SAFE!"));
+  } else {
+    gyr(1,0,0); longBeep();
+    display.setCursor(25, 24);
+    display.print(F("BOOM!"));
+  }
+  display.display();
+  delay(2000);
+  backToMenu();
+}
+
+
+
+void hiddenDefuse_setTimeDisplay() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  drawCenteredText("<  set time (Ready?) >", -10);
+  display.setTextSize(2);
+  display.setCursor(50, 30);
+  display.print(timeLimit_hiddenDefuse/1000);
+  display.display();
+}
+
+void hiddenDefuse() {
+  loadingScreen();
+  delay(1000);
+
+  String defuseCard = ""; // example defuse card ID
+  bool defused = false;
+  bool isNotDefuseCard = false;
+
+
+  // Step 1: Set bomb card
+  display.setTextSize(1);
+  drawCenteredText("Scan Defuse Card");
+  gyr(0, 1, 0); 
+  defuseCard = "";
+  while (defuseCard == "") {
+    defuseCard = getCardID();
+
+    if (digitalRead(PIN_BTN_GO) == HIGH) {
+      shortBeep();
+      backToMenu();
+      return;
+    }
+  }
+  shortBeep();
+  gyr(0, 0, 0);
+
+  hiddenDefuse_setTimeDisplay();
+
+  while (true) {
+    if (digitalRead(PIN_BTN_LEFT) == HIGH && timeLimit_hiddenDefuse > 0) {
+      timeLimit_hiddenDefuse -= 1000;
+      hiddenDefuse_setTimeDisplay();
+      delay(300);
+    } else if (digitalRead(PIN_BTN_RIGHT) == HIGH && timeLimit_hiddenDefuse < 30000) {
+      timeLimit_hiddenDefuse += 1000;
+      hiddenDefuse_setTimeDisplay();
+      delay(300);
+    } else if (digitalRead(PIN_BTN_GO) == HIGH) {
+      break;
+    }
+  }
+  shortBeep();
+
+  drawCenteredText("Ready...");
+  delay(random(1000, 4000));
+  shortBeep();
+
+
+  unsigned long start = millis();
+  int remaining = 0;
+  while (millis() - start - 1000 < timeLimit_hiddenDefuse) {
+    unsigned long elapsed = millis() - start;
+    remaining = (timeLimit_hiddenDefuse - elapsed + 999) / 1000;
+
+    // Clear screen before reprinting to avoid overlap
+    display.clearDisplay();
+    display.setTextSize(1);
+    if (isNotDefuseCard) {
+      display.setCursor(27, 55);
+      display.print("(not defuse!)");
+    } 
+    display.setTextSize(2);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(25, 0);
+    display.println(F("DEFUSE!"));
+    int imgX = (SCREEN_WIDTH - 32) / 2;
+    int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
+    display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
+    // Countdown number big and centered
+    display.setTextSize(2);
+    display.setCursor(57, 50);
+    display.print(remaining);
+    display.display();
+
+    // Check for card
+    String id = getCardID();
+    if (id != "") {
+      if (id == defuseCard) {
+        defused = true;
+        break;
+      } else {
+        gyr(0, 1, 0);
+        isNotDefuseCard = true;
+        doubleBeep();
+      }
+    } 
+    delay(100);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  if (defused) {
+    gyr(1,0,0); shortBeep();
+    display.setCursor(5, 24);
+    display.print(F("SAFE! "));
+    display.print(remaining);
+    display.print(F("s"));
+    if (timeLimit_hiddenDefuse > 3000) timeLimit_hiddenDefuse -= 1000;
+  } else {
+    display.setCursor(15, 24);
+    display.print(F("BOOM!"));
+    display.display();
+    gyr(0,0,1); longBeep();
+  }
+  display.display();
+  delay(2000);
+  backToMenu();
+}
+
+
+int totalcount_bomb = 10;
+int count_bomb;
+int maxDec_bomb = 2;
+int count_putdown;
+
+void holdABomb_setCountDisplay(String name, int num) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  drawCenteredText("< " + name + " >", -10);
+  display.setTextSize(2);
+  display.setCursor(50, 30);
+  display.print(num);
+  display.display();
+}
+
+String bomb_holder = "";
+
+bool holdABomb_idle() {
+  int decTimeLim = ((count_putdown < 8) ? count_putdown * 500 : 4000);
+  int timeLimit = 9000 - decTimeLim;
+  unsigned long start = millis();
+  int remaining = 0;
+  while (millis() - start < timeLimit + 500) {
+    unsigned long elapsed = millis() - start;
+    remaining = (timeLimit - elapsed + 999) / 1000;
+
+    // Clear screen before reprinting to avoid overlap
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextSize(2);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(25, 0);
+    if (count_bomb == 0) display.println(F("UNLUCK.."));
+    else display.println(F("HOLD IT!"));
+    int imgX = (SCREEN_WIDTH - 32) / 2;
+    int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
+    display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
+    // Countdown number big and centered
+    display.setTextSize(2);
+    display.setCursor(30, 50);
+    display.print(remaining);
+    display.print("s : ");
+    display.print(count_bomb);
+    display.display();
+
+    // Check for card
+    bomb_holder = getCardID();
+    if (bomb_holder != "" && millis() - start > 300) {
+      if (count_bomb <= 0) return false;
+      return true;
+    } 
+    delay(100);
+  }
+  return false;
+}
+
+bool holdABomb_holding(float speed) {
+  int countStart = maxDec_bomb;                       // start countdown number
+  float timePerNum = 1000.0 / speed;        // ms per number (speed=0.5 → 2000ms)
+  unsigned long lastChange = millis();
+  int current = countStart;
+
+  while (current >= 0) {
+    // Draw UI
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(20, 0);
+    if (current == 0) {
+      display.println(F("PUT DOWN!"));
+    } else {
+      display.println(F("HOLDING.."));
+    }
+
+    int imgX = (SCREEN_WIDTH - 32) / 2;
+    int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
+    display.drawBitmap(imgX, imgY, epd_bitmap_boom_hide, 32, 32, SH110X_WHITE);
+
+    // Show countdown + speed
+    display.setCursor(30, 50);
+    display.print(current);
+    display.print(F("n > "));
+    display.print(count_bomb);
+    display.display();
+
+    // Add extra hold time when showing 0
+    unsigned long extra = (current == 0) ? (timePerNum * 0.4) : 0;  // 40% longer for 0
+
+    if (millis() - lastChange >= timePerNum + extra) {
+      current--;
+      count_bomb--;
+      if (count_bomb < 0) return false;
+      lastChange = millis();
+    }
+
+    // Check for card to stop early
+      String id = getCardID();
+    if (id != "") {
+      if (id == bomb_holder && current < countStart) {
+        gyr(1, 0, 0);
+        bomb_holder = "";
+        count_putdown++;
+        return true;
+      } else {
+        gyr(0, 1, 0);
+        doubleBeep();
+      }
+    }
+  }
+  return false;
+}
+
+
+
+
+void holdABomb() {
+  loadingScreen();
+  delay(1000);
+  bomb_holder = "";
+  count_putdown = 0;
+  
+  holdABomb_setCountDisplay("set Count (Next)", totalcount_bomb);
+  while (true) {
+    if (digitalRead(PIN_BTN_LEFT) == HIGH && totalcount_bomb > 1) {
+      totalcount_bomb--;
+      holdABomb_setCountDisplay("set Count (Next)", totalcount_bomb);
+      delay(200);
+    } else if (digitalRead(PIN_BTN_RIGHT) == HIGH && totalcount_bomb < 30000) {
+      totalcount_bomb++;
+      holdABomb_setCountDisplay("set Count (Next)", totalcount_bomb);
+      delay(200);
+    } else if (digitalRead(PIN_BTN_GO) == HIGH) {
+      break;
+    }
+  }
+  count_bomb = totalcount_bomb;
+  shortBeep();
+  loadingScreen();
+  delay(500);
+
+  holdABomb_setCountDisplay("max _ times (GO?)", maxDec_bomb);
+  while (true) {
+    if (digitalRead(PIN_BTN_LEFT) == HIGH && maxDec_bomb > 1) {
+      maxDec_bomb--;
+      holdABomb_setCountDisplay("max _ times (GO?)", maxDec_bomb);
+      delay(300);
+    } else if (digitalRead(PIN_BTN_RIGHT) == HIGH && maxDec_bomb < 5) {
+      maxDec_bomb++;
+      holdABomb_setCountDisplay("max _ times (GO?)", maxDec_bomb);
+      delay(300);
+    } else if (digitalRead(PIN_BTN_GO) == HIGH) {
+      break;
+    }
+  }
+  shortBeep();
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextSize(2);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(25, 0);
+  display.println(F("HOLD=GO"));
+  int imgX = (SCREEN_WIDTH - 32) / 2;
+  int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
+  display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
+  // Countdown number big and centered
+  display.setTextSize(2);
+  display.setCursor(30, 50);
+  display.print("0s : ");
+  display.print(count_bomb);
+  display.display();
+  while (true) {
+    bomb_holder = getCardID();
+    if (bomb_holder != "") break;
+  }
+  shortBeep();
+
+  bool res;
+  while (true) {
+    res = holdABomb_holding(0.3 + (0.2 * maxDec_bomb));
+    shortBeep();
+    if (!res) break;
+    res = holdABomb_idle();
+    shortBeep();
+    if (!res) break;
+  }
+
+  display.clearDisplay();
+  display.setCursor(15, 24);
+  display.print(F("BOOM!"));
+  display.display();
+  gyr(0,0,1); longBeep();
+  drawCenteredText("Game Over");
+  display.display();
+  delay(2000);
   backToMenu();
 }
 
@@ -503,10 +921,14 @@ void cardIDFeature() {
   }
 }
 
-void rgbLed(int r, int g, int b) {
-  analogWrite(PIN_R, 255-r);
-  analogWrite(PIN_G, 255-g);
-  analogWrite(PIN_B, 255-b);
+void gyr(int r, int g, int b) {
+  gyrA(r*255, g*255, b*255);
+}
+
+void gyrA(int r, int g, int b) {
+  analogWrite(PIN_B, r);
+  analogWrite(PIN_G, g);
+  analogWrite(PIN_R, b);
 }
 
 // ------------------------------------------------------------------
@@ -593,3 +1015,384 @@ void tutorialMenu() {
 
 
 
+
+
+// ------------------------------
+// BOMB DUNGEON v0.1 Prototype
+// by Anawin & ChatGPT
+// ------------------------------
+
+unsigned int playerCount = 6;    // you can increase for multiplayer
+unsigned int level = 0;
+unsigned int keys = 0;
+bool gameOver = false;
+
+void dungeon_displayCenter(const char* text, int y = 24, int size = 2) {
+  display.clearDisplay();
+  display.setTextSize(size);
+  display.setTextColor(SH110X_WHITE);
+  int16_t x = (128 - strlen(text) * 6 * size) / 2;
+  display.setCursor(x, y);
+  display.print(text);
+  display.display();
+}
+
+
+// ------------------------------
+// Level 0 : Chest of Safety
+// ------------------------------
+int player_dungeon;
+std::map<String, ItemName> cardItems;
+
+void dungeon_level0_display() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(10, 0);
+  display.println("Lobby:");
+  int imgX = (SCREEN_WIDTH - 32) / 2;
+  int imgY = (SCREEN_HEIGHT - 32) / 2;
+  display.drawBitmap(imgX, imgY, epd_bitmap_chest, 32, 32, SH110X_WHITE);
+  display.setCursor(10, 55);
+  display.print(player_dungeon);
+  display.print(" Player    ");
+  if (player_dungeon <= 0) display.print("[Back?]");
+  else display.print("[GO]"); 
+  display.display();
+}
+
+
+void getItem_animation(const uint8_t bitmap[]) {
+  for (int i=5; i>=0; i--) {
+    display.clearDisplay();
+    int imgX = (SCREEN_WIDTH - 32) / 2;
+    int imgY = ((SCREEN_HEIGHT - 32) / 2 ) - (i*i);
+    display.drawBitmap(imgX, imgY, bitmap, 32, 32, SH110X_WHITE);
+    display.display();
+    delay(50);
+  }
+}
+
+void getItemScreen(String card, ItemName item) {
+  String nameItem = "???";
+  cardItems[card] = item;
+  switch (item) {
+    case COIN:
+      getItem_animation(epd_bitmap_coin);
+      nameItem = "Coin";
+      break;
+    case DEFUSE:
+      getItem_animation(epd_bitmap_defuse);
+      nameItem = "Defuse";
+      break;
+    case PREDICT:
+      getItem_animation(epd_bitmap_glass);
+      nameItem = "Predict";
+      break;
+    case SHIELD:
+      getItem_animation(epd_bitmap_shield);
+      nameItem = "Shield";
+      break;
+  }
+  display.setCursor(10, 55);
+  display.print(F("got "));
+  display.print(nameItem);
+  display.print(F("!   [OK]"));
+  display.display();
+}
+
+
+void dungeon_level0_scan() {
+  dungeon_level0_display();
+  
+  String card = "";
+  while (card == "") {
+    card = getCardID();
+    
+    if (digitalRead(PIN_BTN_GO) == HIGH) {
+      if (player_dungeon <= 0) {
+        shortBeep();
+        backToMenu();
+        gameOver = true;
+        return;
+      } else {
+        shortBeep();
+        return;
+      }
+    }
+  }
+  
+  if (!cardItems.count(card)) {
+    shortBeep();
+    if (player_dungeon <= 0) getItemScreen(card, DEFUSE);
+    else getItemScreen(card, COIN);
+    player_dungeon++;
+  } else {
+    doubleBeep();
+    drawCenteredText("already scan");
+  }
+  while (digitalRead(PIN_BTN_GO) == LOW) {
+    delay(100);
+  }
+
+  dungeon_level0_scan();
+}
+
+// ------------------------------
+// Chest logic (generic)
+// ------------------------------
+bool defuseBomb_dungeon() {
+  bool isNotDefuseCard = false;
+  bool defused = false;
+  unsigned long start = millis();
+  int remaining = 0;
+  while (millis() - start < timeLimit_hiddenDefuse) {
+    unsigned long elapsed = millis() - start;
+    remaining = (timeLimit_hiddenDefuse - elapsed + 999) / 1000;
+
+    // Clear screen before reprinting to avoid overlap
+    display.clearDisplay();
+    display.setTextSize(1);
+    if (isNotDefuseCard) {
+      display.setCursor(27, 55);
+      display.print("(not defuse!)");
+    } 
+    display.setTextSize(2);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(25, 0);
+    display.println(F("DEFUSE!"));
+    int imgX = (SCREEN_WIDTH - 32) / 2;
+    int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
+    display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
+    // Countdown number big and centered
+    display.setTextSize(2);
+    display.setCursor(57, 50);
+    display.print(remaining);
+    display.display();
+
+    // Check for card
+    String card = getCardID();
+    if (card != "") {
+      if (isEqualItem(card, DEFUSE)) {
+        defused = true;
+        cardItems.erase(card);
+        break;
+      } else {
+        gyr(0, 1, 0);
+        isNotDefuseCard = true;
+        doubleBeep();
+      }
+    } 
+    delay(100);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  if (defused) {
+    gyr(1,0,0); shortBeep();
+    display.setCursor(5, 24);
+    display.print(F("SAFE! "));
+    display.print(remaining);
+    display.print(F("s"));
+    display.display();
+    if (timeLimit_hiddenDefuse > 3000) timeLimit_hiddenDefuse -= 1000;
+    delay(2000);
+    return true;
+  } else {
+    display.setCursor(15, 24);
+    display.print(F("BOOM!"));
+    display.display();
+    gyr(0,0,1); longBeep();
+    delay(2000);
+    return false;
+  }
+}
+
+
+bool dungeon_openChest(int bombCount, int scans) {
+  bombCount = 2;
+  std::set<int> bombPositions;
+  while (bombPositions.size() < bombCount) {
+    bombPositions.insert(random(0, scans));
+  }
+
+  for (int i = scans - 1; i >= 0; i--) { // reverse order
+    int remaining = i + 1;
+
+    // --- Display countdown & bomb info ---
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("Scan ");
+    display.print("(");
+    display.print(remaining);
+    display.print("/");
+    display.print(scans);
+    display.println(")");
+
+    display.setCursor(0, 16);
+    display.print(bombCount);
+    display.print(" bomb");
+    if (bombCount != 1) display.print("s"); // plural
+
+    display.setCursor(0, 32);
+    display.print("Scan card...");
+    display.display();
+
+    // --- Wait for card scan ---
+    String card = "";
+    while (card == "") card = getCardID();
+
+    // --- Check result ---
+    if (bombPositions.count(i)) {
+      gyr(0, 0, 1);
+      doubleBeep();
+      bool isPass = defuseBomb_dungeon();
+      if (!isPass) return false;
+    } else {
+      gyr(1, 0, 0);
+      shortBeep();
+      getItemScreen(card, SHIELD);
+      player_dungeon++;
+      while (digitalRead(PIN_BTN_GO) == LOW) {
+        delay(100);
+      }
+    }
+  }
+
+  // --- If all safe ---
+  display.clearDisplay();
+  display.setTextSize(2);
+  drawCenteredText("All Safe!", 20);
+  display.display();
+  delay(1000);
+  return true;
+}
+
+
+
+// ------------------------------
+// Door logic (countdown challenge)
+// ------------------------------
+bool dungeon_openDoor() {
+  unsigned long time_limit = 5000;
+  unsigned long start = millis();
+
+  while (millis() - start < time_limit) {
+    unsigned long remain = (time_limit - (millis() - start)) / 1000 + 1;
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(20, 10);
+    display.println("Use Key to open!");
+    display.setTextSize(3);
+    display.setCursor(54, 28);
+    display.print(remain);
+    display.display();
+
+    String id = getCardID();
+    if (id != "") {
+      if (keys > 0) {
+        keys--;
+        gyr(0, 1, 0);
+        shortBeep();
+        dungeon_displayCenter("Door Opened!", 20);
+        delay(1200);
+        return true;
+      } else {
+        gyr(1, 0, 0);
+        longBeep();
+        dungeon_displayCenter("No Key!", 24);
+        delay(1500);
+        return false;
+      }
+    }
+    delay(50);
+  }
+  dungeon_displayCenter("TIME UP!", 24);
+  gyr(1, 0, 0);
+  longBeep();
+  delay(1500);
+  return false;
+}
+
+// ------------------------------
+// Dungeon flow
+// ------------------------------
+
+
+void BombDungeon() {
+  loadingScreen();
+  delay(1000);
+  gameOver = false;
+  level = 0;
+  player_dungeon = 0;
+  cardItems.clear();
+
+  dungeon_level0_scan();
+  if (gameOver) return;
+
+  while (!gameOver) {
+    level++;
+    if (level > 10) break;
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(10, 10);
+    display.print("Level ");
+    display.print(level);
+    display.setCursor(10, 25);
+    display.println("Opening Chest...");
+    display.display();
+    delay(1000);
+
+    int bombs = 1 + (level / 3);     // scale difficulty
+    int scans = playerCount + (level / 2);
+
+    bool safe = dungeon_openChest(bombs, scans);
+    if (!safe) {
+      dungeon_displayCenter("💀 GAME OVER 💀", 20);
+      gameOver = true;
+      break;
+    }
+
+    // Reward example
+    keys++;
+    dungeon_displayCenter("+1 Key!", 24);
+    delay(1000);
+
+    // Door requirement every few levels
+    if (level % 3 == 0) {
+      bool door = dungeon_openDoor();
+      if (!door) {
+        gameOver = true;
+        break;
+      }
+    }
+  }
+
+  if (!gameOver) {
+    dungeon_displayCenter("🏆 YOU WIN! 🏆", 20);
+    gyr(0, 1, 0);
+    for (int i = 0; i < 3; i++) { shortBeep(); delay(300); }
+  }
+
+  delay(3000);
+  backToMenu();
+}
+
+
+bool isEqualItem(String keyToCheck, ItemName expectedState) {
+  // 1. Use find() to look up the key. 
+  // 'it' will be an iterator pointing to the element, OR deviceMap.end() if not found.
+  auto it = cardItems.find(keyToCheck); 
+
+  // 2. Check for existence (was the key found?)
+  if (it != cardItems.end()) {
+    Serial.print("Key '");
+    Serial.print(keyToCheck);
+    Serial.println("' exists.");
+    
+    ItemName currentValue = it->second;
+    return currentValue == expectedState;
+  }
+  return false;
+}
