@@ -1,78 +1,91 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="index.css">
-    <title>ShowPage</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" 
-    rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="index.css">
+  <title>ShowPage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
+
 <body>
-    <section id="part1">
-        <div class="custom-box">
-            <div class="top-section">
-                <!-- <img src="image/temp.jpg" alt="Background" class="bg-img"> -->
-                 <video class="videoo" autoplay loop muted>
-                    <source src="video/TestVideo.mp4" type="video/mp4">
-                </video>
-            </div>
-            <div class="bottom-section">
-                <h1 class="video_preview">บทคัดย่อ</h1>
-                <!-- <h3 class="video_preview">Abstract</h3> -->
-            </div>
-        </div>
-    </section>
+  <header class="navbar-custom">
+    <div class="logo">HBC</div>
+    <ul class="nav-links">
+      <li><a href="#part1">Home</a></li>
+      <li><a href="#part2">About</a></li>
+      <li><a href="#part3">Members</a></li>
+      <li><a href="https://github.com/AnawinA/hidden-bomb-card-game-by-arduino" target="_blank">GitHub</a></li>
+    </ul>
+  </header>
 
-    <section id="part2">
-        <div class="text-center">
-            <h1>Description & file & git Link</h1>
-        </div>
-    </section>
+  <section id="part1" class="hero">
+    <video autoplay muted loop playsinline class="hero-video">
+      <source src="video/TestVideo.mp4" type="video/mp4">
+    </video>
 
-    <section id="part3" class="py-5">
-  <div class="container text-center">
-    <h1 class="mb-4">Member</h1>
-
-    <div class="row justify-content-center">
-      <div class="col-md-3 col-sm-6 mb-4">
-        <div class="member-card">
-          <img src="image/mem1.jpg" alt="Member 1" class="member-img">
-          <h3 class="head3">นาย เปรมณัช <br>
-            คเชนธร</h3>
-          <h4 class="head4">No. 67070252</h4>
-        </div>
-      </div>
-
-      <div class="col-md-3 col-sm-6 mb-4">
-        <div class="member-card">
-          <img src="image/mem3.jpg" alt="Member 2" class="member-img">
-          <h3 class="head3">นาย พันแสน จันทร์เกษม</h3>
-          <h4 class="head4">No. 67070259</h4>
-        </div>
-      </div>
-
-      <div class="col-md-3 col-sm-6 mb-4">
-        <div class="member-card">
-          <img src="image/mem2.png" alt="Member 3" class="member-img">
-          <h3 class="head3">นาย อนาวิล <br>
-            ภู่รัตนากรกุล</h3>
-          <h4 class="head4">No. 67070196</h4>
-        </div>
-      </div>
-
-      <div class="col-md-3 col-sm-6 mb-4">
-        <div class="member-card">
-          <img src="image/mem1.jpg" alt="Member 4" class="member-img">
-          <h3 class="head3">นาย พีรณัฐ <br>
-            ทรัพย์เสรีชัย </h3>
-          <h4 class="head4">No. 67070120</h4>
-        </div>
+    <div class="hero-content">
+      <h1>Hidden Bomb Card Game</h1>
+      <p>การ์ดเกมตึงๆที่เล่นได้ด้วย Arduino — สั้น ๆ ได้ใจความ :D</p>
+      <div class="hero-btns">
+        <a class="btn-link" href="https://github.com/AnawinA/hidden-bomb-card-game-by-arduino" target="_blank">ดูบน GitHub</a>
       </div>
     </div>
-  </div>
-</section>
+  </section>
+
+  <section id="part2" class="about">
+    <div class="container">
+      <h2 class="section-title">About The Game</h2>
+      <p class="section-subtitle">
+        This project is a part of Physical computer subject
+      </p>
+    </div>
+  </section>
+
+  <section id="part3" class="members">
+    <div class="container">
+      <h2 class="section-title">Our Team</h2>
+
+      <div class="member-grid">
+
+        <div class="member-card">
+          <img src="image/mem1.jpg" alt="Premmanat Kachentorn">
+          <h3>นาย เปรมณัช คเชนธร</h3>
+          <p>No. 67070252</p>
+        </div>
+
+        <div class="member-card">
+          <img src="image/mem3.jpg" alt="Phansaen Chankasem">
+          <h3>นาย พันแสน จันทร์เกษม</h3>
+          <p>No. 67070259</p>
+        </div>
+
+        <div class="member-card">
+          <img src="image/mem2.png" alt="Anawin Phurattanagarakul">
+          <h3>นาย อนาวิล ภู่รัตนากรกุล</h3>
+          <p>No. 67070196</p>
+        </div>
+
+        <div class="member-card">
+          <img src="image/mem4.jpg" alt="Peeranat Subsereechai">
+          <h3>นาย พีรณัฐ ทรัพย์เสรีชัย</h3>
+          <p>No. 67070120</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
 </body>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" 
-crossorigin="anonymous"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+  integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
 </html>
