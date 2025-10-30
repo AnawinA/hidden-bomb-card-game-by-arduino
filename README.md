@@ -49,6 +49,31 @@
     - if scan, that person is **HOLDING**
     - if __next people__ not scan & timeout = that person FAIL ❌
 
+### Bomb Dungeon
+> open chest to get item for avoid new card
+> inifinite level (start from 1)
+> increase number of chest & bomb 
+1. in lobby **Lobby**
+  - scan to get defuse card while counting **Player **
+  - n Player will set a suitable number of chest & bomb
+  - click Button to start level 1
+2. begin **Level 1** 
+  - there is some bomb inside chest (ex. 1/3 is a bomb)
+  - scan card = get item/bomb
+    - item (random):
+      - COIN: keep it to unlock next level
+      - DEFUSE/SHIELD: scan for stop bomb
+      - PREDICT: to see if next card is bomb or not
+      - COPY: change to previous card you got
+    - bomb:
+      - start countdown 
+      - if scan defuse: SAFE & return to dungeon ✅
+      - else: not defuse card! ⚠️
+      - if timeout: explode & FAIL ❌
+3. each level%3==0
+  - you have to __unlock next level__ by use coin
+  - start from 1 coin increase every 1
+  - have time limit (timeout = FAIL ❌)
 
 
 ### Show Card ID

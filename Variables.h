@@ -15,7 +15,8 @@ extern const unsigned char epd_bitmap_arrow [] PROGMEM;
 extern const unsigned char epd_bitmap_coin [] PROGMEM;
 extern const unsigned char epd_bitmap_boom [] PROGMEM;
 extern const unsigned char epd_bitmap_boom_hide [] PROGMEM;
-enum ItemName {NONE, COIN, DEFUSE, PREDICT, SHIELD};
+extern const unsigned char epd_bitmap_swap [] PROGMEM;
+enum ItemName {COIN, DEFUSE, PREDICT, SHIELD, COPY};
 
 
 #endif // VARIABLES_H
