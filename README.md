@@ -73,7 +73,7 @@
 3. each level%3==0
   - you have to __unlock next level__ by use coin
   - start from 1 coin increase every 1
-  - have time limit (timeout = FAIL ❌)
+  - have time limit (timeou+t = FAIL ❌)
 
 
 ### Show Card ID

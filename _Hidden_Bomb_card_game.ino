@@ -1,4 +1,3 @@
-// Hidden Bomb - Start/Menu prototype v2 (with bomb image & beep)
 #include "Variables.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -15,7 +14,7 @@
 #define OLED_RESET    -1
 Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ----------------- RFID -----------------
+// RFID 
 #define SS_PIN 10
 #define RST_PIN 9
 MFRC522 rfid(SS_PIN, RST_PIN);
@@ -53,7 +52,6 @@ bool goPressed = false;
 // Slower fake loading
 const unsigned long LOADING_DURATION_MS = 1000;
 
-//Game: Bomb or Not
 enum GameState {SET_BOMB, SCAN_CARD, RESULT};
 AppState state = STATE_LOADING;
 
@@ -193,7 +191,7 @@ void loop() {
         pollGoButton();
         if (goPressed) {
           goPressed = false;
-          tone(PIN_BEEP, 1000, 100); // short beep
+          tone(PIN_BEEP, 1000, 100);
           Serial.println(currentSelection);
           EEPROM.update(ADDR_SELECTION, currentSelection);  // Save to EEPROM
           switch (currentSelection) {
@@ -279,7 +277,7 @@ void drawLoadingAnimation() {
     if (target > now) delay(target - now);
   }
 
-  delay(300); // little pause before start screen
+  delay(300);
 }
 
 bool firstStartScreen = true;
@@ -294,11 +292,9 @@ void showStartScreen() {
   display.println(F("HIDDEN"));
   display.println(F("BOMB"));
 
-  // Draw cards at top right corner
   display.drawBitmap(88, 0, epd_bitmap_game_icon, 32, 32, SH110X_WHITE);
   
 
-  // Press to start text
   display.setTextSize(1);
   display.setCursor(10, 48);
   display.println(F("Press [GO] to start"));
@@ -308,15 +304,13 @@ void showStartScreen() {
 
 void showMenuScreen() {
   display.clearDisplay();
-  // Draw title
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(2);
   display.setCursor(0, 0);
   display.println(F("MENU"));
 
   display.setTextSize(1);
-  
-  int y = 40; // vertical center-ish
+  int y = 40;
   
   // Show previous item if exists
   if (currentSelection > 0) {
@@ -379,9 +373,9 @@ void resetRFID() {
 String getCardID() {
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
     static unsigned long lastCheck = 0;
-    if (millis() - lastCheck > 500) { // check every 5s
+    if (millis() - lastCheck > 500) { 
       lastCheck = millis();
-      if (!rfid.PCD_PerformSelfTest()) { // test RFID health
+      if (!rfid.PCD_PerformSelfTest()) {
         resetRFID();
       }
     }
@@ -426,11 +420,9 @@ void loadingScreen() {
 
 
 void BombRouletteGame() {
-  // Fake loading
   loadingScreen();
   delay(1000);
 
-  // Step 1: Set bomb card
   display.setTextSize(1);
   drawCenteredText("Scan Bomb Card");
   gyr(0, 1, 0); 
@@ -493,9 +485,6 @@ void BombRouletteGame() {
     }
   }
 
-
-  // Step 4: Return to menu
-  // (You can replace this with a proper state change)
   backToMenu();
 }
 
@@ -522,7 +511,6 @@ void BombIsExploding() {
     unsigned long elapsed = millis() - start;
     int remaining = (TIME_LIMIT - elapsed + 999) / 1000; // ceiling rounding
 
-    // Draw countdown number
     display.fillRect(50, 40, 30, 20, SH110X_BLACK); // clear area
     display.setTextSize(2);
     display.setCursor(58, 40);
@@ -570,7 +558,7 @@ void hiddenDefuse() {
   loadingScreen();
   delay(1000);
 
-  String defuseCard = ""; // example defuse card ID
+  String defuseCard = "";
   bool defused = false;
   bool isNotDefuseCard = false;
 
@@ -634,7 +622,6 @@ void hiddenDefuse() {
     int imgX = (SCREEN_WIDTH - 32) / 2;
     int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
     display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
-    // Countdown number big and centered
     display.setTextSize(2);
     display.setCursor(57, 50);
     display.print(remaining);
@@ -702,7 +689,6 @@ bool holdABomb_idle() {
     unsigned long elapsed = millis() - start;
     remaining = (timeLimit - elapsed + 999) / 1000;
 
-    // Clear screen before reprinting to avoid overlap
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextSize(2);
@@ -733,13 +719,12 @@ bool holdABomb_idle() {
 }
 
 bool holdABomb_holding(float speed) {
-  int countStart = maxDec_bomb;                       // start countdown number
-  float timePerNum = 1000.0 / speed;        // ms per number (speed=0.5 → 2000ms)
+  int countStart = maxDec_bomb;
+  float timePerNum = 1000.0 / speed;
   unsigned long lastChange = millis();
   int current = countStart;
 
   while (current >= 0) {
-    // Draw UI
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(SH110X_WHITE);
@@ -754,7 +739,6 @@ bool holdABomb_holding(float speed) {
     int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
     display.drawBitmap(imgX, imgY, epd_bitmap_boom_hide, 32, 32, SH110X_WHITE);
 
-    // Show countdown + speed
     display.setCursor(30, 50);
     display.print(current);
     display.print(F("n > "));
@@ -962,10 +946,7 @@ void tutorialMenu() {
   delay(500);
   bool running = true;
   while (running) {
-    // Draw
     display.clearDisplay();
-
-    // Draw image (top center)
     int imgX = (SCREEN_WIDTH - 32) / 2;
     int imgY = 4;
     display.drawBitmap(imgX, imgY, tutorialPages[currentPage].img, 32, 32, SH110X_WHITE);
@@ -987,17 +968,17 @@ void tutorialMenu() {
     display.display();
 
     // --- Input handling ---
-    if (digitalRead(PIN_BTN_RIGHT) == HIGH) {  // RIGHT button
+    if (digitalRead(PIN_BTN_RIGHT) == HIGH) {
       currentPage++;
       if (currentPage >= TOTAL_PAGES) currentPage = 0;
       delay(300);
     }
-    if (digitalRead(PIN_BTN_LEFT) == HIGH) {  // LEFT button
+    if (digitalRead(PIN_BTN_LEFT) == HIGH) {
       currentPage--;
       if (currentPage < 0) currentPage = TOTAL_PAGES - 1;
       delay(300);
     }
-    if (digitalRead(PIN_BTN_GO) == HIGH) {  // GO button to exit
+    if (digitalRead(PIN_BTN_GO) == HIGH) {
       shortBeep();
       running = false;
       backToMenu();
@@ -1011,10 +992,8 @@ void tutorialMenu() {
 
 
 // ------------------------------
-// BOMB DUNGEON v0.1 Prototype
-// by Anawin & ChatGPT
+// BOMB DUNGEON is here
 // ------------------------------
-
 unsigned int level = 0;
 bool gameOver = false;
 
@@ -1149,7 +1128,6 @@ bool defuseBomb_dungeon() {
     unsigned long elapsed = millis() - start;
     remaining = (timeLimit_hiddenDefuse - elapsed + 999) / 1000;
 
-    // Clear screen before reprinting to avoid overlap
     display.clearDisplay();
     display.setTextSize(1);
     if (isNotDefuseCard) {
@@ -1163,7 +1141,6 @@ bool defuseBomb_dungeon() {
     int imgX = (SCREEN_WIDTH - 32) / 2;
     int imgY = ((SCREEN_HEIGHT - 32) / 2) + 0;
     display.drawBitmap(imgX, imgY, epd_bitmap_boom, 32, 32, SH110X_WHITE);
-    // Countdown number big and centered
     display.setTextSize(2);
     display.setCursor(57, 50);
     display.print(remaining);
@@ -1215,7 +1192,7 @@ bool dungeon_openChest(int bombCount, int scans) {
     bombPositions.insert(random(0, scans));
   }
 
-  for (int i = scans - 1; i >= 0; i--) { // reverse order
+  for (int i = scans - 1; i >= 0; i--) {
     int remaining = i + 1;
 
     display.clearDisplay();
@@ -1234,7 +1211,7 @@ bool dungeon_openChest(int bombCount, int scans) {
     display.print("   "); 
     display.print(bombCount);
     display.print(" bomb");
-    if (bombCount != 1) display.print("s"); // plural
+    if (bombCount != 1) display.print("s");
     display.display();
 
     // --- Wait for card scan ---
@@ -1370,8 +1347,6 @@ bool dungeon_openDoor(int totalCoin) {
 // ------------------------------
 // Dungeon flow
 // ------------------------------
-
-
 void BombDungeon() {
   loadingScreen();
   delay(1000);
@@ -1429,11 +1404,8 @@ void BombDungeon() {
 
 
 bool isEqualItem(String keyToCheck, ItemName expectedState) {
-  // 1. Use find() to look up the key. 
-  // 'it' will be an iterator pointing to the element, OR deviceMap.end() if not found.
   auto it = cardItems.find(keyToCheck); 
 
-  // 2. Check for existence (was the key found?)
   if (it != cardItems.end()) {
     Serial.print("Key '");
     Serial.print(keyToCheck);
