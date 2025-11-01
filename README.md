@@ -85,4 +85,4 @@
 
 [Website](https://anawina.github.io/hidden-bomb-card-game-by-arduino/)
 
-[Poster Canva](https://drive.google.com/file/d/1mFG3C9TreaomRD763zlQ2x3LWn7bI0uh/view?usp=sharing)
+[Poster Preview](https://drive.google.com/file/d/1mFG3C9TreaomRD763zlQ2x3LWn7bI0uh/view?usp=sharing)
